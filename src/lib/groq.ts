@@ -2,12 +2,9 @@ import Groq from 'groq-sdk';
 import type { Note, ChatMessage, GapInfo, ConceptInfo } from './types';
 import { embeddingClient, cosineSimilarity } from './embeddings/client';
 
-export const GROQ_MODELS = [
-  { id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Versatile)' },
-  { id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B (Instant)' },
-  { id: 'openai/gpt-oss-120b', label: 'GPT-OSS 120B' },
-  { id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' },
-];
+export const GROQ_MODELS = [{ id: 'openai/gpt-oss-20b', label: 'GPT-OSS 20B' }];
+
+export const DEFAULT_GROQ_MODEL = GROQ_MODELS[0].id;
 
 export interface InterrogationFocus {
   kind: 'gap' | 'concept' | 'note' | 'general';
@@ -32,7 +29,7 @@ async function retrieveRelevantNotes(notes: Note[], query: string, topK = 6): Pr
   }
 }
 
-function buildSystemPrompt(focus: InterrogationFocus, context: Note[]): string {
+function buildSystemPrompt(focus: InterrogationFocus, context: Note[], isOpening: boolean): string {
   const contextBlock = context
     .map((n, i) => `[${i + 1}] (#${n.tag}) ${n.text}`)
     .join('\n');
@@ -54,6 +51,8 @@ function buildSystemPrompt(focus: InterrogationFocus, context: Note[]): string {
     focusInstruction = `Scan the learner's notes as a whole. Pick the weakest, vaguest, or most under-examined idea and interrogate it first.`;
   }
 
+  const openingInstruction = `The learner just wrote this note and has not said anything yet. Do not greet them or wait — open immediately with 1-2 sharp Socratic questions about it, using the related notes below for context (point out a connection, a contradiction, or an undefined term if one jumps out). Get straight into it.`;
+
   return `You are Socrates, conducting a rigorous Socratic interrogation of a learner's own written notes to reinforce and deepen their understanding. You are not a lecturer — you almost never explain things directly. Instead you ask short, sharp, probing questions, one or two at a time, that force the learner to articulate, defend, or revise their own beliefs.
 
 Rules:
@@ -66,7 +65,7 @@ Rules:
 - Stay warm but relentless — like a mentor who respects them enough to not let them off easy.
 
 ${focusInstruction}
-
+${isOpening ? `\n${openingInstruction}\n` : ''}
 Here are relevant excerpts from the learner's notes (their own words, retrieved by relevance):
 ${contextBlock || '(no notes yet — ask them to start writing down what they know)'}
 `;
@@ -84,9 +83,13 @@ export async function interrogate(params: {
   const { apiKey, model, allNotes, history, userMessage, focus, onToken } = params;
   const groq = new Groq({ apiKey, dangerouslyAllowBrowser: true });
 
-  const query = `${focus.label} ${userMessage}`.trim();
-  const context = await retrieveRelevantNotes(allNotes, query || focus.label);
-  const systemPrompt = buildSystemPrompt(focus, context);
+  const isOpening = !userMessage.trim();
+  const queryText = userMessage.trim() || focus.note?.text || focus.concept?.label || focus.gap?.label || focus.label;
+  const context = await retrieveRelevantNotes(
+    allNotes.filter((n) => n.id !== focus.note?.id),
+    queryText,
+  );
+  const systemPrompt = buildSystemPrompt(focus, context, isOpening);
 
   const messages: Groq.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: 'system', content: systemPrompt },
@@ -94,8 +97,10 @@ export async function interrogate(params: {
       role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const),
       content: m.content,
     })),
-    { role: 'user', content: userMessage },
   ];
+  if (userMessage.trim()) {
+    messages.push({ role: 'user', content: userMessage });
+  }
 
   if (onToken) {
     const stream = await groq.chat.completions.create({

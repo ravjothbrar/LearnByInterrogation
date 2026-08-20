@@ -17,7 +17,7 @@ import {
 } from './lib/db';
 import { embeddingClient, type EmbeddingStatus } from './lib/embeddings/client';
 import { buildGraph } from './lib/graph/build';
-import { interrogate, type InterrogationFocus } from './lib/groq';
+import { interrogate, DEFAULT_GROQ_MODEL, type InterrogationFocus } from './lib/groq';
 import type { Note, NoteTag, Settings, ChatMessage } from './lib/types';
 
 function uid(): string {
@@ -26,7 +26,7 @@ function uid(): string {
 
 export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
-  const [settings, setSettings] = useState<Settings>({ groqApiKey: '', groqModel: 'llama-3.3-70b-versatile' });
+  const [settings, setSettings] = useState<Settings>({ groqApiKey: '', groqModel: DEFAULT_GROQ_MODEL });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [showWhy, setShowWhy] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -50,19 +50,84 @@ export default function App() {
 
   const graph = useMemo(() => buildGraph(notes), [notes]);
 
-  const commitNote = useCallback(async (text: string, tag: NoteTag) => {
-    const note: Note = { id: uid(), text, tag, createdAt: Date.now(), embedding: null };
-    setNotes((prev) => [...prev, note]);
-    await saveNote(note);
-    try {
-      const embedding = await embeddingClient.embed(text);
-      const withEmbedding: Note = { ...note, embedding };
-      setNotes((prev) => prev.map((n) => (n.id === note.id ? withEmbedding : n)));
-      await saveNote(withEmbedding);
-    } catch (err) {
-      console.error('embedding failed', err);
-    }
-  }, []);
+  const runInterrogation = useCallback(
+    async (params: {
+      apiKey: string;
+      model: string;
+      allNotes: Note[];
+      history: ChatMessage[];
+      userMessage: string;
+      focus: InterrogationFocus;
+    }) => {
+      setIsStreaming(true);
+      const assistantId = uid();
+      try {
+        const finalText = await interrogate({
+          ...params,
+          onToken: (partial) => {
+            setMessages((prev) => {
+              const existing = prev.find((m) => m.id === assistantId);
+              const assistantMsg: ChatMessage = {
+                id: assistantId,
+                role: 'assistant',
+                content: partial,
+                createdAt: Date.now(),
+              };
+              if (existing) {
+                return prev.map((m) => (m.id === assistantId ? assistantMsg : m));
+              }
+              return [...prev, assistantMsg];
+            });
+          },
+        });
+        const finalMsg: ChatMessage = { id: assistantId, role: 'assistant', content: finalText, createdAt: Date.now() };
+        await addChatMessage(finalMsg);
+      } catch (err) {
+        const errorMsg: ChatMessage = {
+          id: assistantId,
+          role: 'assistant',
+          content: `⚠ Something went wrong talking to Groq: ${err instanceof Error ? err.message : String(err)}`,
+          createdAt: Date.now(),
+        };
+        setMessages((prev) => [...prev.filter((m) => m.id !== assistantId), errorMsg]);
+      } finally {
+        setIsStreaming(false);
+      }
+    },
+    [],
+  );
+
+  const commitNote = useCallback(
+    async (text: string, tag: NoteTag) => {
+      const note: Note = { id: uid(), text, tag, createdAt: Date.now(), embedding: null };
+      const notesWithNew = [...notes, note];
+      setNotes(notesWithNew);
+      await saveNote(note);
+
+      const noteFocus: InterrogationFocus = { kind: 'note', label: text.slice(0, 40), note };
+      setFocus(noteFocus);
+      if (settings.groqApiKey) {
+        runInterrogation({
+          apiKey: settings.groqApiKey,
+          model: settings.groqModel,
+          allNotes: notesWithNew,
+          history: [],
+          userMessage: '',
+          focus: noteFocus,
+        });
+      }
+
+      try {
+        const embedding = await embeddingClient.embed(text);
+        const withEmbedding: Note = { ...note, embedding };
+        setNotes((prev) => prev.map((n) => (n.id === note.id ? withEmbedding : n)));
+        await saveNote(withEmbedding);
+      } catch (err) {
+        console.error('embedding failed', err);
+      }
+    },
+    [notes, settings, runInterrogation],
+  );
 
   const saveSettingsHandler = useCallback(async (s: Settings) => {
     setSettings(s);
@@ -94,48 +159,17 @@ export default function App() {
       const historyBefore = messages;
       setMessages((prev) => [...prev, userMsg]);
       await addChatMessage(userMsg);
-      setIsStreaming(true);
 
-      const assistantId = uid();
-      try {
-        const finalText = await interrogate({
-          apiKey: settings.groqApiKey,
-          model: settings.groqModel,
-          allNotes: notes,
-          history: historyBefore,
-          userMessage: text,
-          focus: focus ?? { kind: 'general', label: 'general' },
-          onToken: (partial) => {
-            setMessages((prev) => {
-              const existing = prev.find((m) => m.id === assistantId);
-              const assistantMsg: ChatMessage = {
-                id: assistantId,
-                role: 'assistant',
-                content: partial,
-                createdAt: Date.now(),
-              };
-              if (existing) {
-                return prev.map((m) => (m.id === assistantId ? assistantMsg : m));
-              }
-              return [...prev, assistantMsg];
-            });
-          },
-        });
-        const finalMsg: ChatMessage = { id: assistantId, role: 'assistant', content: finalText, createdAt: Date.now() };
-        await addChatMessage(finalMsg);
-      } catch (err) {
-        const errorMsg: ChatMessage = {
-          id: assistantId,
-          role: 'assistant',
-          content: `⚠ Something went wrong talking to Groq: ${err instanceof Error ? err.message : String(err)}`,
-          createdAt: Date.now(),
-        };
-        setMessages((prev) => [...prev.filter((m) => m.id !== assistantId), errorMsg]);
-      } finally {
-        setIsStreaming(false);
-      }
+      await runInterrogation({
+        apiKey: settings.groqApiKey,
+        model: settings.groqModel,
+        allNotes: notes,
+        history: historyBefore,
+        userMessage: text,
+        focus: focus ?? { kind: 'general', label: 'general' },
+      });
     },
-    [settings, notes, messages, focus],
+    [settings, notes, messages, focus, runInterrogation],
   );
 
   return (
@@ -155,7 +189,7 @@ export default function App() {
               href="https://ravjothbrar.com/"
               target="_blank"
               rel="noreferrer"
-              className="absolute bottom-3 right-4 z-10 font-mono-tag text-[10px] text-[var(--text-dim)] hover:text-[var(--accent-2)] transition-colors"
+              className="absolute top-3 right-4 z-10 font-mono-tag text-[10px] text-[var(--text-dim)] hover:text-[var(--accent-2)] transition-colors"
             >
               Built by Ravjoth Brar ↗
             </a>

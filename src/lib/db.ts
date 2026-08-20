@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { Note, Settings, ChatMessage } from './types';
+import { DEFAULT_GROQ_MODEL } from './groq';
 
 interface LBIDb extends DBSchema {
   notes: {
@@ -64,8 +65,8 @@ const SETTINGS_KEY = 'app-settings';
 export async function getSettings(): Promise<Settings> {
   const db = await getDb();
   const raw = await db.get('settings', SETTINGS_KEY as never);
-  if (raw) return raw as Settings;
-  return { groqApiKey: '', groqModel: 'llama-3.3-70b-versatile' };
+  if (raw) return { ...(raw as Settings), groqModel: DEFAULT_GROQ_MODEL };
+  return { groqApiKey: '', groqModel: DEFAULT_GROQ_MODEL };
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

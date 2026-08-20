@@ -1,5 +1,15 @@
-import { useMemo } from 'react';
-import ReactFlow, { Background, Controls, MiniMap, type Edge, type Node } from 'reactflow';
+import { useEffect, useRef } from 'react';
+import ReactFlow, {
+  Background,
+  Controls,
+  MiniMap,
+  ReactFlowProvider,
+  useNodesState,
+  useEdgesState,
+  useReactFlow,
+  type Node,
+  type Edge,
+} from 'reactflow';
 import 'reactflow/dist/style.css';
 import type { BuiltGraph } from '../lib/types';
 import { NoteNode, ConceptNode, GapNode } from './nodes/GraphNodes';
@@ -17,10 +27,8 @@ interface GraphViewProps {
   onSelect: (focus: InterrogationFocus) => void;
 }
 
-export function GraphView({ graph, focus, onSelect }: GraphViewProps) {
-  const { nodes, edges } = useMemo(() => buildLayout(graph, focus, onSelect), [graph, focus, onSelect]);
-
-  if (graph.notes.length === 0) {
+export function GraphView(props: GraphViewProps) {
+  if (props.graph.notes.length === 0) {
     return (
       <div className="h-full flex flex-col items-center justify-center text-center px-8">
         <p className="text-[var(--text-dim)] text-sm max-w-xs">
@@ -32,13 +40,43 @@ export function GraphView({ graph, focus, onSelect }: GraphViewProps) {
   }
 
   return (
+    <ReactFlowProvider>
+      <FlowInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function FlowInner({ graph, focus, onSelect }: GraphViewProps) {
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges] = useEdgesState([]);
+  const { fitView } = useReactFlow();
+  const structureKeyRef = useRef<string>('');
+
+  useEffect(() => {
+    const { nodes: computedNodes, edges: computedEdges } = buildLayout(graph, focus, onSelect);
+    setNodes((prev) => {
+      const prevById = new Map(prev.map((n) => [n.id, n]));
+      return computedNodes.map((n) => {
+        const existing = prevById.get(n.id);
+        return existing ? { ...n, position: existing.position } : n;
+      });
+    });
+    setEdges(computedEdges);
+
+    const structureKey = `${graph.notes.length}-${graph.concepts.length}-${graph.gaps.length}`;
+    if (structureKeyRef.current !== structureKey) {
+      structureKeyRef.current = structureKey;
+      requestAnimationFrame(() => fitView({ padding: 0.3, duration: 300 }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [graph, focus]);
+
+  return (
     <ReactFlow
-      key={`${graph.notes.length}-${graph.concepts.length}-${graph.gaps.length}`}
       nodes={nodes}
       edges={edges}
+      onNodesChange={onNodesChange}
       nodeTypes={nodeTypes}
-      fitView
-      fitViewOptions={{ padding: 0.3 }}
       proOptions={{ hideAttribution: true }}
       minZoom={0.2}
     >

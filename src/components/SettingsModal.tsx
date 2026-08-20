@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Settings } from '../lib/types';
-import { GROQ_MODELS } from '../lib/groq';
+import { GROQ_MODELS, DEFAULT_GROQ_MODEL } from '../lib/groq';
 
 interface SettingsModalProps {
   settings: Settings;
@@ -11,7 +11,6 @@ interface SettingsModalProps {
 
 export function SettingsModal({ settings, onSave, onClose, onClearData }: SettingsModalProps) {
   const [apiKey, setApiKey] = useState(settings.groqApiKey);
-  const [model, setModel] = useState(settings.groqModel);
   const [showKey, setShowKey] = useState(false);
 
   return (
@@ -72,25 +71,18 @@ export function SettingsModal({ settings, onSave, onClose, onClearData }: Settin
           </div>
         </label>
 
-        <label className="block mb-6">
+        <div className="block mb-6">
           <span className="font-mono-tag text-xs text-[var(--text-dim)] uppercase tracking-wide">Model</span>
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-inset)] px-3 py-2 text-sm text-[var(--text-h)] outline-none focus:border-[var(--accent-border)]"
-          >
-            {GROQ_MODELS.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
-            ))}
-          </select>
-        </label>
+          <div className="mt-1.5 w-full rounded-lg border border-[var(--border)] bg-[var(--bg-inset)] px-3 py-2 text-sm text-[var(--text-h)] flex items-center justify-between">
+            <span>{GROQ_MODELS[0].label}</span>
+            <span className="font-mono-tag text-[10px] text-[var(--text-dim)]">via Groq</span>
+          </div>
+        </div>
 
         <div className="flex gap-3">
           <button
             onClick={() => {
-              onSave({ groqApiKey: apiKey.trim(), groqModel: model });
+              onSave({ groqApiKey: apiKey.trim(), groqModel: DEFAULT_GROQ_MODEL });
               onClose();
             }}
             className="flex-1 rounded-lg bg-[var(--accent)] hover:bg-[var(--accent-2)] text-white font-medium py-2.5 transition-colors"

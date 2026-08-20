@@ -1,0 +1,103 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+:root {
+  --bg: #0a0a0f;
+  --bg-raised: #121218;
+  --bg-panel: #15151d;
+  --bg-inset: #0d0d13;
+  --border: #26262f;
+  --border-soft: #1c1c24;
+  --text: #d4d3dc;
+  --text-dim: #83808f;
+  --text-h: #f3f2f7;
+
+  --accent: #8b5cf6;
+  --accent-2: #a78bfa;
+  --accent-bg: rgba(139, 92, 246, 0.12);
+  --accent-border: rgba(139, 92, 246, 0.4);
+
+  --amber: #d4a24c;
+  --amber-bg: rgba(212, 162, 76, 0.12);
+  --amber-border: rgba(212, 162, 76, 0.4);
+
+  --rose: #e0687a;
+  --rose-bg: rgba(224, 104, 122, 0.12);
+  --rose-border: rgba(224, 104, 122, 0.4);
+
+  --teal: #4cc2b0;
+  --teal-bg: rgba(76, 194, 176, 0.12);
+  --teal-border: rgba(76, 194, 176, 0.4);
+
+  --sans: 'Space Grotesk', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(139, 92, 246, 0.08) 1px, transparent 0);
+  background-size: 28px 28px;
+}
+
+::selection {
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-border);
+}
+
+.font-mono-tag {
+  font-family: var(--mono);
+  letter-spacing: 0.06em;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up {
+  animation: fade-in-up 0.28s ease-out both;
+}
+
+.react-flow__attribution {
+  display: none;
+}

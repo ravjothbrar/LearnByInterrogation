@@ -28,7 +28,7 @@ export default function App() {
   const [notes, setNotes] = useState<Note[]>([]);
   const [settings, setSettings] = useState<Settings>({ groqApiKey: '', groqModel: DEFAULT_GROQ_MODEL });
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [showWhy, setShowWhy] = useState(false);
+  const [showWhy, setShowWhy] = useState(() => !localStorage.getItem('lbi-seen-why'));
   const [showSettings, setShowSettings] = useState(false);
   const [embeddingStatus, setEmbeddingStatus] = useState<EmbeddingStatus>('idle');
   const [focus, setFocus] = useState<InterrogationFocus | null>(null);
@@ -213,7 +213,14 @@ export default function App() {
         </div>
       </div>
 
-      {showWhy && <WhyModal onClose={() => setShowWhy(false)} />}
+      {showWhy && (
+        <WhyModal
+          onClose={() => {
+            localStorage.setItem('lbi-seen-why', '1');
+            setShowWhy(false);
+          }}
+        />
+      )}
       {showSettings && (
         <SettingsModal
           settings={settings}
